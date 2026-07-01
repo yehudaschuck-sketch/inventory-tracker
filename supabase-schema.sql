@@ -12,7 +12,8 @@ create table if not exists public.items (
   quantity    integer not null default 1,
   location    text,
   notes       text,
-  photo_url   text,
+  photo_url   text,                          -- legacy single photo (thumbnail fallback)
+  photo_urls  text[] not null default '{}',  -- all photos for the item
   added_by    text
 );
 

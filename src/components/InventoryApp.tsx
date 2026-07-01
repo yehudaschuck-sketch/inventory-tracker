@@ -4,8 +4,9 @@ import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import { getSupabase } from "@/lib/supabase";
 import { db, isLocalMode } from "@/lib/db";
-import { Item, ItemInput, SortDir, SortKey } from "@/lib/types";
+import { Item, ItemInput, SortDir, SortKey, itemPhotos } from "@/lib/types";
 import ItemForm from "./ItemForm";
+import ItemDetail from "./ItemDetail";
 
 export default function InventoryApp({
   addedBy,
@@ -23,6 +24,7 @@ export default function InventoryApp({
 
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Item | null>(null);
+  const [viewing, setViewing] = useState<Item | null>(null);
 
   async function load() {
     setLoading(true);
@@ -63,20 +65,25 @@ export default function InventoryApp({
     });
   }, [items, search, categoryFilter]);
 
-  async function handleCreate(input: ItemInput, photo: File | null) {
-    await db.createItem(input, photo, addedBy);
+  async function handleCreate(input: ItemInput, newPhotos: File[]) {
+    await db.createItem(input, newPhotos, addedBy);
     await load();
   }
 
-  async function handleUpdate(input: ItemInput, photo: File | null) {
+  async function handleUpdate(
+    input: ItemInput,
+    newPhotos: File[],
+    keptUrls: string[]
+  ) {
     if (!editing) return;
-    await db.updateItem(editing.id, input, photo);
+    await db.updateItem(editing.id, input, newPhotos, keptUrls);
     await load();
   }
 
   async function handleDelete(item: Item) {
     if (!confirm(`Delete "${item.name}"?`)) return;
     await db.deleteItem(item.id);
+    setViewing(null);
     await load();
   }
 
@@ -166,62 +173,55 @@ export default function InventoryApp({
               {totalQty} total qty
             </p>
             <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-              {visible.map((item) => (
-                <li
-                  key={item.id}
-                  className="overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-800"
-                >
-                  <div className="relative aspect-square bg-zinc-100 dark:bg-zinc-800">
-                    {item.photo_url ? (
-                      <Image
-                        src={item.photo_url}
-                        alt={item.name}
-                        fill
-                        sizes="(max-width:640px) 50vw, 33vw"
-                        className="object-cover"
-                        unoptimized
-                      />
-                    ) : (
-                      <div className="flex h-full items-center justify-center text-3xl">
-                        📦
+              {visible.map((item) => {
+                const photos = itemPhotos(item);
+                return (
+                  <li key={item.id}>
+                    <button
+                      onClick={() => setViewing(item)}
+                      className="w-full overflow-hidden rounded-xl border border-zinc-200 text-left transition hover:border-zinc-400 dark:border-zinc-800 dark:hover:border-zinc-600"
+                    >
+                      <div className="relative aspect-square bg-zinc-100 dark:bg-zinc-800">
+                        {photos[0] ? (
+                          <Image
+                            src={photos[0]}
+                            alt={item.name}
+                            fill
+                            sizes="(max-width:640px) 50vw, 33vw"
+                            className="object-cover"
+                            unoptimized
+                          />
+                        ) : (
+                          <div className="flex h-full items-center justify-center text-3xl">
+                            📦
+                          </div>
+                        )}
+                        <span className="absolute right-1 top-1 rounded-full bg-black/60 px-2 py-0.5 text-xs font-medium text-white">
+                          ×{item.quantity}
+                        </span>
+                        {photos.length > 1 && (
+                          <span className="absolute left-1 top-1 rounded-full bg-black/60 px-2 py-0.5 text-xs font-medium text-white">
+                            📷 {photos.length}
+                          </span>
+                        )}
                       </div>
-                    )}
-                    <span className="absolute right-1 top-1 rounded-full bg-black/60 px-2 py-0.5 text-xs font-medium text-white">
-                      ×{item.quantity}
-                    </span>
-                  </div>
-                  <div className="p-2">
-                    <p className="truncate text-sm font-medium">{item.name}</p>
-                    {item.category && (
-                      <p className="truncate text-xs text-zinc-400">
-                        {item.category}
-                      </p>
-                    )}
-                    {item.location && (
-                      <p className="truncate text-xs text-zinc-400">
-                        📍 {item.location}
-                      </p>
-                    )}
-                    <div className="mt-2 flex gap-2 text-xs">
-                      <button
-                        onClick={() => {
-                          setEditing(item);
-                          setShowForm(true);
-                        }}
-                        className="text-blue-600 hover:underline"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => handleDelete(item)}
-                        className="text-red-600 hover:underline"
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  </div>
-                </li>
-              ))}
+                      <div className="p-2">
+                        <p className="truncate text-sm font-medium">{item.name}</p>
+                        {item.category && (
+                          <p className="truncate text-xs text-zinc-400">
+                            {item.category}
+                          </p>
+                        )}
+                        {item.location && (
+                          <p className="truncate text-xs text-zinc-400">
+                            📍 {item.location}
+                          </p>
+                        )}
+                      </div>
+                    </button>
+                  </li>
+                );
+              })}
             </ul>
           </>
         )}
@@ -239,11 +239,26 @@ export default function InventoryApp({
         +
       </button>
 
+      {viewing && !showForm && (
+        <ItemDetail
+          item={viewing}
+          onEdit={() => {
+            setEditing(viewing);
+            setShowForm(true);
+          }}
+          onDelete={() => handleDelete(viewing)}
+          onClose={() => setViewing(null)}
+        />
+      )}
+
       {showForm && (
         <ItemForm
           initial={editing}
           onSubmit={editing ? handleUpdate : handleCreate}
-          onClose={() => setShowForm(false)}
+          onClose={() => {
+            setShowForm(false);
+            setViewing(null);
+          }}
         />
       )}
     </div>

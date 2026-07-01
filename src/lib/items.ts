@@ -26,19 +26,26 @@ async function uploadPhoto(file: File): Promise<string> {
   return data.publicUrl;
 }
 
+async function uploadMany(files: File[]): Promise<string[]> {
+  const urls: string[] = [];
+  for (const file of files) urls.push(await uploadPhoto(file));
+  return urls;
+}
+
 export async function createItem(
   input: ItemInput,
-  photo: File | null,
+  newPhotos: File[],
   userEmail: string | null
 ): Promise<void> {
-  const photo_url = photo ? await uploadPhoto(photo) : null;
+  const photo_urls = await uploadMany(newPhotos);
   const { error } = await getSupabase().from("items").insert({
     name: input.name,
     category: input.category || null,
     quantity: input.quantity,
     location: input.location || null,
     notes: input.notes || null,
-    photo_url,
+    photo_urls,
+    photo_url: photo_urls[0] ?? null,
     added_by: userEmail,
   });
   if (error) throw error;
@@ -47,17 +54,23 @@ export async function createItem(
 export async function updateItem(
   id: string,
   input: ItemInput,
-  photo: File | null
+  newPhotos: File[],
+  keptUrls: string[]
 ): Promise<void> {
-  const patch: Record<string, unknown> = {
-    name: input.name,
-    category: input.category || null,
-    quantity: input.quantity,
-    location: input.location || null,
-    notes: input.notes || null,
-  };
-  if (photo) patch.photo_url = await uploadPhoto(photo);
-  const { error } = await getSupabase().from("items").update(patch).eq("id", id);
+  const uploaded = await uploadMany(newPhotos);
+  const photo_urls = [...keptUrls, ...uploaded];
+  const { error } = await getSupabase()
+    .from("items")
+    .update({
+      name: input.name,
+      category: input.category || null,
+      quantity: input.quantity,
+      location: input.location || null,
+      notes: input.notes || null,
+      photo_urls,
+      photo_url: photo_urls[0] ?? null,
+    })
+    .eq("id", id);
   if (error) throw error;
 }
 

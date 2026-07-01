@@ -20,10 +20,7 @@ function openDb(): Promise<IDBDatabase> {
   });
 }
 
-function tx(
-  db: IDBDatabase,
-  mode: IDBTransactionMode
-): IDBObjectStore {
+function tx(db: IDBDatabase, mode: IDBTransactionMode): IDBObjectStore {
   return db.transaction(STORE, mode).objectStore(STORE);
 }
 
@@ -34,6 +31,12 @@ function fileToDataUrl(file: File): Promise<string> {
     reader.onerror = () => reject(reader.error);
     reader.readAsDataURL(file);
   });
+}
+
+async function filesToDataUrls(files: File[]): Promise<string[]> {
+  const urls: string[] = [];
+  for (const file of files) urls.push(await fileToDataUrl(file));
+  return urls;
 }
 
 export async function fetchItems(
@@ -59,10 +62,11 @@ export async function fetchItems(
 
 export async function createItem(
   input: ItemInput,
-  photo: File | null,
+  newPhotos: File[],
   addedBy: string | null
 ): Promise<void> {
   const db = await openDb();
+  const photo_urls = await filesToDataUrls(newPhotos);
   const item: Item = {
     id: crypto.randomUUID(),
     created_at: new Date().toISOString(),
@@ -71,7 +75,8 @@ export async function createItem(
     quantity: input.quantity,
     location: input.location || null,
     notes: input.notes || null,
-    photo_url: photo ? await fileToDataUrl(photo) : null,
+    photo_urls,
+    photo_url: photo_urls[0] ?? null,
     added_by: addedBy,
   };
   await new Promise<void>((resolve, reject) => {
@@ -84,7 +89,8 @@ export async function createItem(
 export async function updateItem(
   id: string,
   input: ItemInput,
-  photo: File | null
+  newPhotos: File[],
+  keptUrls: string[]
 ): Promise<void> {
   const db = await openDb();
   const existing: Item = await new Promise((resolve, reject) => {
@@ -92,6 +98,8 @@ export async function updateItem(
     req.onsuccess = () => resolve(req.result as Item);
     req.onerror = () => reject(req.error);
   });
+  const uploaded = await filesToDataUrls(newPhotos);
+  const photo_urls = [...keptUrls, ...uploaded];
   const updated: Item = {
     ...existing,
     name: input.name,
@@ -99,7 +107,8 @@ export async function updateItem(
     quantity: input.quantity,
     location: input.location || null,
     notes: input.notes || null,
-    photo_url: photo ? await fileToDataUrl(photo) : existing.photo_url,
+    photo_urls,
+    photo_url: photo_urls[0] ?? null,
   };
   await new Promise<void>((resolve, reject) => {
     const req = tx(db, "readwrite").put(updated);

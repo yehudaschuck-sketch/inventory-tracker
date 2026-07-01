@@ -2,11 +2,15 @@
 
 import { useState } from "react";
 import Image from "next/image";
-import { Item, ItemInput } from "@/lib/types";
+import { Item, ItemInput, itemPhotos } from "@/lib/types";
 
 interface Props {
   initial?: Item | null;
-  onSubmit: (input: ItemInput, photo: File | null) => Promise<void>;
+  onSubmit: (
+    input: ItemInput,
+    newPhotos: File[],
+    keptUrls: string[]
+  ) => Promise<void>;
   onClose: () => void;
 }
 
@@ -16,19 +20,35 @@ export default function ItemForm({ initial, onSubmit, onClose }: Props) {
   const [quantity, setQuantity] = useState(initial?.quantity ?? 1);
   const [location, setLocation] = useState(initial?.location ?? "");
   const [notes, setNotes] = useState(initial?.notes ?? "");
-  const [photo, setPhoto] = useState<File | null>(null);
-  const [preview, setPreview] = useState<string | null>(initial?.photo_url ?? null);
+
+  // Photos already saved on this item that we're keeping.
+  const [keptUrls, setKeptUrls] = useState<string[]>(
+    initial ? itemPhotos(initial) : []
+  );
+  // Newly picked files, each paired with a preview URL for display.
+  const [newPhotos, setNewPhotos] = useState<
+    { file: File; preview: string }[]
+  >([]);
+
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  function handlePhoto(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0] ?? null;
-    setPhoto(file);
-    if (file) setPreview(URL.createObjectURL(file));
-    // Phones name every camera shot "image.jpg", so the input's value doesn't
-    // change between captures and onChange won't fire again. Clearing it lets
-    // you take/replace a photo as many times as you like.
+  function handleAddPhotos(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? []);
+    setNewPhotos((prev) => [
+      ...prev,
+      ...files.map((file) => ({ file, preview: URL.createObjectURL(file) })),
+    ]);
+    // Reset so the same file/camera capture can be added again.
     e.target.value = "";
+  }
+
+  function removeKept(url: string) {
+    setKeptUrls((prev) => prev.filter((u) => u !== url));
+  }
+
+  function removeNew(preview: string) {
+    setNewPhotos((prev) => prev.filter((p) => p.preview !== preview));
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -38,7 +58,8 @@ export default function ItemForm({ initial, onSubmit, onClose }: Props) {
     try {
       await onSubmit(
         { name, category, quantity, location, notes },
-        photo
+        newPhotos.map((p) => p.file),
+        keptUrls
       );
       onClose();
     } catch (err) {
@@ -49,6 +70,8 @@ export default function ItemForm({ initial, onSubmit, onClose }: Props) {
 
   const field =
     "w-full rounded-lg border border-zinc-300 bg-transparent px-3 py-2.5 text-base outline-none focus:border-zinc-900 dark:border-zinc-700 dark:focus:border-zinc-100";
+
+  const totalPhotos = keptUrls.length + newPhotos.length;
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center">
@@ -67,31 +90,68 @@ export default function ItemForm({ initial, onSubmit, onClose }: Props) {
         </div>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-3">
-          <label className="relative flex aspect-video w-full cursor-pointer items-center justify-center overflow-hidden rounded-lg border-2 border-dashed border-zinc-300 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800">
-            {preview ? (
-              <>
+          {/* Photo thumbnails + add tile */}
+          <div className="grid grid-cols-3 gap-2">
+            {keptUrls.map((url) => (
+              <div
+                key={url}
+                className="relative aspect-square overflow-hidden rounded-lg border border-zinc-200 dark:border-zinc-700"
+              >
                 <Image
-                  src={preview}
-                  alt="Preview"
-                  width={400}
-                  height={225}
-                  className="h-full w-full object-cover"
+                  src={url}
+                  alt="Item photo"
+                  fill
+                  sizes="120px"
+                  className="object-cover"
                   unoptimized
                 />
-                <span className="absolute bottom-1 right-1 rounded-full bg-black/60 px-2 py-0.5 text-xs font-medium text-white">
-                  📷 Tap to change
-                </span>
-              </>
-            ) : (
-              <span className="text-sm text-zinc-400">📷 Tap to take or upload a photo</span>
-            )}
-            <input
-              type="file"
-              accept="image/*"
-              onChange={handlePhoto}
-              className="hidden"
-            />
-          </label>
+                <button
+                  type="button"
+                  onClick={() => removeKept(url)}
+                  className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-black/60 text-xs text-white"
+                  aria-label="Remove photo"
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+            {newPhotos.map((p) => (
+              <div
+                key={p.preview}
+                className="relative aspect-square overflow-hidden rounded-lg border border-zinc-200 dark:border-zinc-700"
+              >
+                <Image
+                  src={p.preview}
+                  alt="New photo"
+                  fill
+                  sizes="120px"
+                  className="object-cover"
+                  unoptimized
+                />
+                <button
+                  type="button"
+                  onClick={() => removeNew(p.preview)}
+                  className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-black/60 text-xs text-white"
+                  aria-label="Remove photo"
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+            <label className="flex aspect-square cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed border-zinc-300 bg-zinc-50 text-center text-xs text-zinc-400 dark:border-zinc-700 dark:bg-zinc-800">
+              <span className="text-2xl leading-none">＋</span>
+              <span className="mt-1">
+                {totalPhotos === 0 ? "Add photo" : "Add more"}
+              </span>
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={handleAddPhotos}
+                className="hidden"
+              />
+            </label>
+          </div>
 
           <input
             required
