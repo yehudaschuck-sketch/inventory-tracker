@@ -17,7 +17,6 @@ export const metadata: Metadata = {
   description: "Track your team's inventory with photos, labels, and search.",
   manifest: "/manifest.json",
   appleWebApp: { capable: true, title: "Inventory", statusBarStyle: "default" },
-  other: { "x-build": "gh-autodeploy-1" },
 };
 
 export const viewport = {
