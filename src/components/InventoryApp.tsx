@@ -7,6 +7,7 @@ import { db, isLocalMode } from "@/lib/db";
 import { Item, ItemInput, SortDir, SortKey, itemPhotos } from "@/lib/types";
 import ItemForm from "./ItemForm";
 import ItemDetail from "./ItemDetail";
+import BulkAdd from "./BulkAdd";
 
 export default function InventoryApp({
   addedBy,
@@ -25,6 +26,7 @@ export default function InventoryApp({
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Item | null>(null);
   const [viewing, setViewing] = useState<Item | null>(null);
+  const [showBulk, setShowBulk] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -227,7 +229,14 @@ export default function InventoryApp({
         )}
       </div>
 
-      {/* Floating add button */}
+      {/* Floating action buttons */}
+      <button
+        onClick={() => setShowBulk(true)}
+        className="fixed bottom-24 right-6 z-20 flex h-12 items-center gap-1.5 rounded-full bg-white px-4 text-sm font-medium text-zinc-900 shadow-lg ring-1 ring-zinc-200 dark:bg-zinc-800 dark:text-zinc-100 dark:ring-zinc-700"
+        aria-label="Bulk add photos"
+      >
+        🗂️ Bulk
+      </button>
       <button
         onClick={() => {
           setEditing(null);
@@ -259,6 +268,14 @@ export default function InventoryApp({
             setShowForm(false);
             setViewing(null);
           }}
+        />
+      )}
+
+      {showBulk && (
+        <BulkAdd
+          addedBy={addedBy}
+          onDone={load}
+          onClose={() => setShowBulk(false)}
         />
       )}
     </div>
